@@ -14,11 +14,11 @@ def dynamicTimestep(t,dtMax,dtMin,t0):
     Inclination = 3
     return (dtMax-dtMin)/(1+math.exp(Inclination*(-t+t0)))+dtMin
 
-def autoTimestep(no_iterations,dt,inputs,limitIterations=4,increment=2):
+def autoTimestep(no_iterations,dt,inputs,limitIterations=3,increment=2):
     # Check if 
     if no_iterations < limitIterations:
         dt = min(increment*dt,inputs.dtMax)
-    elif no_iterations > limitIterations + 2:
+    elif no_iterations > limitIterations + 1:
         dt = max((1/increment)*dt,inputs.dtMin)
     else:
         dt = dt
@@ -31,8 +31,8 @@ def dynamicSaveDt(dt):
 class Inputs():
     def __init__(self):
         #%%############ Case Definition    ##############################
-        self.caseId = 'TransWellSimulator_7_PressBC_Test1' ## If name already exists in folder ./PostProcessing/Cases, 
-                         ## old data will be overwritten.
+        self.caseId = 'TransWellSimulator_7_HigherVelBC'  ## If name already exists in folder ./PostProcessing/Cases, 
+                                                            ## old data will be overwritten.
         
         # Output Variables
         self.ParaViewFilenames = []; self.ParaViewTitles = []
@@ -80,27 +80,27 @@ class Inputs():
         self.CInitialMixture = 0.5      # Mass fraction of Fluid0. Fluid1 = 1-Flui0
         
         # Diffusity of Between species (m²/s)
-        self.D = 1e-3
+        self.D = 5e-3
         
         # Rheology
         # Newtonian Viscosity
         self.mu_water = 0.01    # Pa.s
-        self.mu_cem = 0.3       # Pa.s
+        self.mu_cem = 0.295       # Pa.s
         self.mu_values = [self.mu_cem , self.mu_water]  
         
         ## Rheology - Modified SMD (Souza Mendes e Dutra (2004)) + Cure(tauY(t)) 
         # Input Variables
         self.tau0 = 19.019         # Dinamic Yield Stress               
-        self.eta0 = 1.3e4            # Viscosity Value for Low shear rates
-        self.etaInf = 0.1*self.eta0  # Equilibrium Viscosity(Newtonian Plato: Lowgh shear rates)
+        self.eta0 = 1.3e4          # Viscosity Value for Low shear rates
+        self.etaInf = self.mu_cem  # Equilibrium Viscosity(Newtonian Plato: Lowgh shear rates)
         # self.etaInf = self.mu_cem       # Equilibrium Viscosity(Newtonian Plato: Lowgh shear rates)
         self.K = 1.43              # Consistency Index
         self.n = 0.572             # Power-law Index
         self.ts = 6000             # Caracteristic viscosity buildup time
         self.eps = 1e-10
-        self.tauY_t = Expression('tau0*exp(t/ts)',degree=1,\
-                                  tau0 = self.tau0, \
-                                  ts = self.ts, t = 0)
+        self.tauY_t = Expression( 'tau0*exp(t/ts)',degree=1,\
+                                    tau0 = self.tau0, \
+                                    ts = self.ts, t = 0)
         # Modified SMD Model Expression
         self.rheologicalModel = Expression('(1 - exp(-eta0*(gammaDot)/tauY_t))* \
                                             (tauY_t/(gammaDot+eps) + K*(pow(gammaDot+eps,nPow)/ \
@@ -128,15 +128,15 @@ class Inputs():
         self.shrinkage_t0 = 1.2*self.ts            # s  
 
         # Shrinkage Model Expression
-        self.shrinkageModel = Expression('(rhoMax-((rhoMax-rhoMin)/  \
-                                         (1 + exp(Inclination*(-t+t0))) \
-                                         +rhoMin) + rhoMin)*cFrac + rho_water*(1-cFrac)', degree=2, \
-                                         cFrac = Constant(self.eps), \
-                                         rhoMax = self.rho_values[self.Fluid0], \
-                                         rhoMin = self.shrinkage_rhoMin, \
-                                         Inclination = self.shrinkage_inclination, \
-                                         t=self.t0, t0 = self.shrinkage_t0, \
-                                         rho_water = self.rho_values[self.Fluid1])
+        self.shrinkageModel = Expression(  '(rhoMax-((rhoMax-rhoMin)/  \
+                                            (1 + exp(Inclination*(-t+t0))) \
+                                            +rhoMin) + rhoMin)*cFrac + rho_water*(1-cFrac)', degree=2, \
+                                            cFrac = Constant(self.eps), \
+                                            rhoMax = self.rho_values[self.Fluid0], \
+                                            rhoMin = self.shrinkage_rhoMin, \
+                                            Inclination = self.shrinkage_inclination, \
+                                            t=self.t0, t0 = self.shrinkage_t0, \
+                                            rho_water = self.rho_values[self.Fluid1])
                 
         #%%############ Problem Geometry   ##############################
         ## Mesh File
@@ -190,15 +190,33 @@ class Inputs():
         self.VzOutlet = Expression('VzOutlet',VzOutlet=0.0,degree=2)
         # self.VrOutlet = Expression('(1/(rho*A))*0.000163 + 0*t',\
         #                     A=self.AOut,rho=self.rhoOut,t=t,degree=2) # All BaseCases
-        self.VrOutlet = Expression('t <= 100 ? (1/(rho*A))*0.00163 : (1/(rho*A))*0.055 /((pow(t,0.78)))',\
-                                   A=self.AOut,rho=self.rhoOut,t=t,degree=2) # All BaseCases
+        # self.VrOutlet = Expression( 't <= 90 ? \
+        #                             (1/(rho*A))*0.00157 : \
+        #                             (1/(rho*A))*0.0032 /((pow(t,0.67))) - \
+        #                             (1/(8*1300))*exp(0.3*(t-17000)/1300)',\
+        #                             A=self.AOut,rho=self.rhoOut,t=t,degree=2) # FIT
+        self.VrOutlet = Expression( 't <= 90 ? \
+                                    (1/(rho*A))*0.0314 : \
+                                    (1/(rho*A))*0.16 /((pow(t,0.38))) - \
+                                    (1/(8*1000))*exp(0.3*(t-8000)/1000)',\
+                                    A=self.AOut,rho=self.rhoOut,t=t,degree=2) # Higher Flowrate
+        # self.VrOutlet = Expression( 't <= 90 ? \
+        #                             (1/(rho*A))*0.0314 : \
+        #                             (1/(rho*A))*0.64 /((pow(t,0.67))) - \
+        #                             (1/(8*1000))*exp(0.3*(t-8000)/1000)',\
+        #                             A=self.AOut,rho=self.rhoOut,t=t,degree=2) # High Flowrate
+        # self.VrOutlet = Expression( 't <= 90 ? \
+        #                             (1/(rho*A))*0.0000157 : \
+        #                             (1/(rho*A))*0.00032 /((pow(t,0.67))) - \
+        #                             (1/(8*255))*exp(0.3*(t-20000)/255)',\
+        #                             A=self.AOut,rho=self.rhoOut,t=t,degree=2) # Low Florate
         # self.VrOutlet = 't <= 100 ? (1/(rho*A))*0.0163 : (1/(rho*A))*0.55 /((pow(t,0.78)))'
         # self.VrOutlet = 't <= 100 ? (1/(rho*A))*0.000163 : (1/(rho*A))*0.0055 /((pow(t,0.78)))'#'2*exp(1-(t/200))/300'#'2*exp(1-(t/200))/300'#
         # self.velocityBCs.update({'Inlet' : {2: self.VrInlet}}) # m/s
         self.velocityBCs.update({'Inlet' : {1: self.VrInlet}}) # m/s
         # self.velocityBCs.update({'Outlet' : {1: self.VzOutlet}}) # m/s
         # self.velocityBCs.update({'Outlet' : {0: self.VzOutlet}}) # m/s
-        # self.velocityBCs.update({'Outlet' : {1: self.VrOutlet}}) # m/s
+        self.velocityBCs.update({'Outlet' : {1: self.VrOutlet}}) # m/s
         
         ## Pressure Inputs
         self.pressureBCs = {}
@@ -208,8 +226,8 @@ class Inputs():
         self.pInlet = self.rho_mix0*self.Zmin*self.g #0.3164557 #self.rho_values[0]*2*self.g
         self.pressureBCs.update({'Inlet' : self.pInlet}) # Pa
         # Outlet Pressure
-        self.pOutlet = 0.60*(self.rho_mix0*self.g*self.ZFL)
-        self.pressureBCs.update({'Outlet' : self.pOutlet}) # Pa
+        # self.pOutlet = 0.60*(self.rho_mix0*self.g*self.ZFL)
+        # self.pressureBCs.update({'Outlet' : self.pOutlet}) # Pa
         
 
         #%%############ Solver parameters ###############################
